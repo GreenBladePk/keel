@@ -23,6 +23,7 @@ from keel.tools.alerts import list_alerts as _list_alerts, ack_alert as _ack_ale
 from keel.tools.resolve_conflict import resolve_conflict as _resolve_conflict
 from keel.tools.handoff import create_handoff as _create_handoff, \
     accept_handoff as _accept_handoff, decline_handoff as _decline_handoff
+from keel.tools.report_activity import report_activity as _report_activity
 
 _principal_var: contextvars.ContextVar[Principal | None] = contextvars.ContextVar(
     "keel_principal", default=None
@@ -302,6 +303,23 @@ async def decline_handoff(handoff_id: str) -> dict:
     return await _decline_handoff(db.get_pool(), current_principal(), handoff_id=handoff_id)
 
 
+@mcp.tool()
+async def report_activity(source: str, scope_tags: list[str] | None = None,
+                          summary: str | None = None, file_paths: list[str] | None = None,
+                          ref: str | None = None) -> dict:
+    """Report work you just did so Keel can flag drift from active decisions.
+
+    `source` is one of edit, turn, commit, pr, gateway, slack. Records the activity
+    and triages it against active decisions on `scope_tags`: result "none",
+    "possible" (scope has decisions), or "conflict" (with evidence). On possible or
+    conflict you get a `change` alert to re-check. Returns the signal id, result,
+    related decisions, and an `inbox`.
+    """
+    return await _report_activity(db.get_pool(), current_principal(), source=source,
+                                  scope_tags=scope_tags, summary=summary,
+                                  file_paths=file_paths, ref=ref)
+
+
 # Test-only helper: run the real auth resolution + dispatch without MCP framing.
 _HANDLERS = {
     "register_session": lambda p, a: _register_session(db.get_pool(), p, **a),
@@ -317,6 +335,7 @@ _HANDLERS = {
     "create_handoff": lambda p, a: _create_handoff(db.get_pool(), p, **a),
     "accept_handoff": lambda p, a: _accept_handoff(db.get_pool(), p, **a),
     "decline_handoff": lambda p, a: _decline_handoff(db.get_pool(), p, **a),
+    "report_activity": lambda p, a: _report_activity(db.get_pool(), p, **a),
 }
 
 
