@@ -32,6 +32,10 @@ adapter for that harness; this file is about *using the tools*.
    (`{alerts, handoffs, new_lessons}`). When it is non-empty, tell the user
    before continuing.
 
+> In some harnesses (e.g. Claude Code), an edit on a scope that carries active
+> decisions may be **denied once** with the conflicting decision as the reason —
+> read it and re-plan around it. It is advice with evidence, not a lock.
+
 ## Connecting
 
 Keel speaks MCP over streamable HTTP at `$KEEL_URL` (e.g.

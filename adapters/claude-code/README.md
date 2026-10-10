@@ -33,6 +33,15 @@ the MCP connector lets the session record decisions and check intent.
 - **UserPromptSubmit** — injects any pending alerts/handoffs before each prompt
   ("before the next action").
 
+## PreToolUse deny-once (optional)
+Create `.keel/scopes.json` in your repo (copy `adapters/claude-code/.keel/scopes.example.json`)
+mapping file-path regexes to scope tags. On an `Edit`/`Write`/`MultiEdit` whose file maps to a
+scope that carries active decisions, Keel checks the edit and — if it contradicts one — **denies
+the tool once** with the decision as the reason, so you re-plan. It is NOT a lock and changes no
+code. Most edits skip the LLM: the hook first does a cheap decision-free screen and only escalates
+when the scope actually carries decisions. Skipped (edit allowed) when `.keel/scopes.json` is
+absent, nothing matches, Keel is unreachable, or no LLM is configured.
+
 ## Fail-open guarantee
 Every hook exits `0` on any error (server down, bad token, missing `jq`/`curl`,
 malformed input). A Keel outage never blocks or interrupts your session.

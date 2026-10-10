@@ -1,0 +1,5 @@
+[
+  {"pattern": "src/api/orders/", "scope_tags": ["api:orders"]},
+  {"pattern": "src/schema/user", "scope_tags": ["schema:user"]},
+  {"pattern": "\\.sql$", "scope_tags": ["schema:user"]}
+]
