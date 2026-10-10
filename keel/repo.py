@@ -277,3 +277,34 @@ async def insert_drift_signal(conn, *, project_id, participant_id, source, scope
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *""",
         project_id, participant_id, source, scope_tags, summary, file_paths or [],
         ref, confidence, result)
+
+
+# --- P1 tools: outcome, alert feedback, decision request ---
+
+async def insert_outcome(conn, *, decision_id, result, evidence_ref, source,
+                         confirmed_by) -> asyncpg.Record:
+    return await conn.fetchrow(
+        """INSERT INTO outcome (decision_id, result, evidence_ref, source, confirmed_by)
+           VALUES ($1,$2,$3,$4,$5) RETURNING *""",
+        decision_id, result, evidence_ref, source, confirmed_by)
+
+
+async def get_alert(conn, alert_id) -> asyncpg.Record | None:
+    return await conn.fetchrow("SELECT * FROM alert WHERE id=$1", alert_id)
+
+
+async def insert_alert_feedback(conn, *, alert_id, verdict, note) -> asyncpg.Record:
+    return await conn.fetchrow(
+        """INSERT INTO alert_feedback (alert_id, verdict, note)
+           VALUES ($1,$2,$3) RETURNING *""",
+        alert_id, verdict, note)
+
+
+async def insert_decision_request(conn, *, project_id, requester_participant_id,
+                                  owner_person_id, question, options, scope_tags) -> asyncpg.Record:
+    return await conn.fetchrow(
+        """INSERT INTO decision_request
+             (project_id, requester_participant_id, owner_person_id, question, options, scope_tags)
+           VALUES ($1,$2,$3,$4,$5,$6) RETURNING *""",
+        project_id, requester_participant_id, owner_person_id, question,
+        options or [], scope_tags or [])
