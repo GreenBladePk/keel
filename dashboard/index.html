@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Keel Dashboard</title>
+  <style>
+    :root { --bg:#0f1115; --card:#1a1d24; --fg:#e6e6e6; --mut:#8b93a7; --acc:#6ea8fe; }
+    body { margin:0; font:14px/1.5 system-ui, sans-serif; background:var(--bg); color:var(--fg); }
+    header { padding:12px 16px; background:var(--card); display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    header input { background:#0b0d11; color:var(--fg); border:1px solid #2a2f3a; border-radius:6px; padding:6px 8px; }
+    header input#url { width:240px; } header input#token { width:200px; }
+    button { background:var(--acc); color:#06101f; border:0; border-radius:6px; padding:6px 12px; cursor:pointer; }
+    #msg { color:var(--mut); margin-left:auto; }
+    main { display:grid; grid-template-columns:1fr 1fr; gap:16px; padding:16px; }
+    .wide { grid-column:1 / -1; }
+    .card { background:var(--card); border:1px solid #232733; border-radius:10px; padding:12px 14px; }
+    .card h2 { font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--mut); margin:0 0 8px; }
+    .row { padding:7px 0; border-bottom:1px solid #232733; }
+    .row:last-child { border-bottom:0; }
+    .tag { color:var(--acc); } .mut { color:var(--mut); } .pill { font-size:11px; color:var(--mut); }
+    code { color:#cdd3e0; }
+  </style>
+</head>
+<body>
+  <header>
+    <strong>Keel</strong>
+    <input id="url" placeholder="Keel URL e.g. http://localhost:8000" />
+    <input id="token" type="password" placeholder="bearer token" />
+    <button id="go">Connect</button>
+    <label class="pill"><input type="checkbox" id="auto" /> auto</label>
+    <span id="msg">not connected</span>
+  </header>
+  <main>
+    <section class="card wide"><h2>Event timeline</h2><div id="events"></div></section>
+    <section class="card"><h2>Active decisions</h2><div id="decisions"></div></section>
+    <section class="card"><h2>Open conflicts</h2><div id="conflicts"></div></section>
+    <section class="card"><h2>Pending alerts</h2><div id="alerts"></div></section>
+    <section class="card"><h2>Pending handoffs</h2><div id="handoffs"></div></section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
