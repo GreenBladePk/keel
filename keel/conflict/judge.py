@@ -44,7 +44,9 @@ class LLMJudge:
     async def _default_create(self, *, model, **kwargs) -> Judgment:
         import instructor
         client = instructor.from_provider(f"litellm/{model}", async_client=True)
-        return await client.create(response_model=Judgment, **kwargs)
+        # Pass model to create() too: with litellm, from_provider does not always
+        # bind it onto the underlying acompletion call.
+        return await client.create(response_model=Judgment, model=model, **kwargs)
 
     async def judge(self, subject_text, candidate) -> Judgment:
         from keel.config import get_settings
