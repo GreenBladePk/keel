@@ -42,6 +42,13 @@ code. Most edits skip the LLM: the hook first does a cheap decision-free screen 
 when the scope actually carries decisions. Skipped (edit allowed) when `.keel/scopes.json` is
 absent, nothing matches, Keel is unreachable, or no LLM is configured.
 
+## PostToolUse drift (optional)
+With the same `.keel/scopes.json`, after an edit on a mapped scope that carries active
+decisions, Keel records the activity (`report_activity`) and — if it drifts — injects a
+re-check note and leaves a `change` alert in your inbox. This is the remediation counterpart
+to the PreToolUse deny-once prevention. Skipped (silent) when the map is absent, nothing
+matches, or Keel is unreachable.
+
 ## Fail-open guarantee
 Every hook exits `0` on any error (server down, bad token, missing `jq`/`curl`,
 malformed input). A Keel outage never blocks or interrupts your session.

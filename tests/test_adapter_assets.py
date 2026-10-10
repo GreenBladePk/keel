@@ -38,3 +38,10 @@ def test_scopes_example_parses():
     p = os.path.join(ADAPTER, ".keel", "scopes.example.json")
     data = json.load(open(p))
     assert isinstance(data, list) and data and "pattern" in data[0] and "scope_tags" in data[0]
+
+
+def test_settings_fragment_declares_posttooluse():
+    with open(os.path.join(ADAPTER, "settings.hooks.json")) as f:
+        cfg = json.load(f)
+    assert "PostToolUse" in cfg["hooks"]
+    assert "post_tool_use.sh" in json.dumps(cfg["hooks"]["PostToolUse"])
