@@ -236,3 +236,31 @@ async def set_handoff_status(conn, handoff_id, status, *, accepted_at=None,
                to_participant_id=COALESCE($4, to_participant_id)
            WHERE id=$1""",
         handoff_id, status, accepted_at, to_participant_id)
+
+
+# --- Dashboard reads (read-only) ---
+
+async def list_events(conn, project_id, limit) -> list[asyncpg.Record]:
+    return await conn.fetch(
+        "SELECT * FROM event WHERE project_id=$1 ORDER BY id DESC LIMIT $2",
+        project_id, limit)
+
+
+async def open_conflicts(conn, project_id) -> list[asyncpg.Record]:
+    return await conn.fetch(
+        "SELECT * FROM conflict WHERE project_id=$1 AND status='open' ORDER BY created_at DESC",
+        project_id)
+
+
+async def project_pending_alerts(conn, project_id) -> list[asyncpg.Record]:
+    return await conn.fetch(
+        """SELECT * FROM alert WHERE project_id=$1 AND acknowledged_at IS NULL
+           ORDER BY id DESC""",
+        project_id)
+
+
+async def project_pending_handoffs(conn, project_id) -> list[asyncpg.Record]:
+    return await conn.fetch(
+        """SELECT * FROM handoff WHERE project_id=$1 AND status='pending'
+           ORDER BY created_at DESC""",
+        project_id)
