@@ -28,3 +28,8 @@ htmlcov/
 *.swp
 .idea/
 .vscode/
+
+# Design docs + planning scratch (kept in-tree, out of version control)
+/docs/
+/context/
+/.superpowers/
