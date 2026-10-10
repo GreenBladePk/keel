@@ -264,3 +264,16 @@ async def project_pending_handoffs(conn, project_id) -> list[asyncpg.Record]:
         """SELECT * FROM handoff WHERE project_id=$1 AND status='pending'
            ORDER BY created_at DESC""",
         project_id)
+
+
+# --- Drift ---
+
+async def insert_drift_signal(conn, *, project_id, participant_id, source, scope_tags,
+                              summary, file_paths, ref, confidence, result) -> asyncpg.Record:
+    return await conn.fetchrow(
+        """INSERT INTO drift_signal
+             (project_id, participant_id, source, scope_tags, summary, file_paths,
+              ref, confidence, result)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *""",
+        project_id, participant_id, source, scope_tags, summary, file_paths or [],
+        ref, confidence, result)
