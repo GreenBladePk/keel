@@ -1,10 +1,12 @@
 import contextlib
 import contextvars
 import hashlib
+import json
 import os
 
 from mcp.server.fastmcp import FastMCP
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
 
 from keel.db import pool as db
@@ -36,6 +38,73 @@ def current_principal() -> Principal:
     if p is None:
         raise PermissionError("no authenticated principal in context")
     return p
+
+
+# --- Dashboard read-only REST (serializers + handlers) ---
+
+def _iso(v):
+    return v.isoformat() if v is not None else None
+
+
+def _row_decision(r):
+    return {"id": str(r["id"]), "statement": r["statement"], "rationale": r["rationale"],
+            "scope_tags": list(r["scope_tags"]), "status": r["status"],
+            "created_at": _iso(r["created_at"])}
+
+
+def _row_conflict(r):
+    return {"id": str(r["id"]), "decision_a_id": str(r["decision_a_id"]),
+            "relation": r["relation"], "severity": r["severity"],
+            "explanation": r["explanation"], "status": r["status"],
+            "created_at": _iso(r["created_at"])}
+
+
+def _row_alert(r):
+    return {"id": str(r["id"]), "kind": r["kind"], "ref_id": str(r["ref_id"]),
+            "target_person_id": str(r["target_person_id"]) if r["target_person_id"] else None,
+            "delivered_at": _iso(r["delivered_at"])}
+
+
+def _row_handoff(r):
+    return {"id": str(r["id"]),
+            "from_participant_id": str(r["from_participant_id"]) if r["from_participant_id"] else None,
+            "to_person_id": str(r["to_person_id"]) if r["to_person_id"] else None,
+            "scope_tags": list(r["scope_tags"]), "note": r["note"], "status": r["status"],
+            "created_at": _iso(r["created_at"])}
+
+
+def _row_event(r):
+    return {"id": r["id"], "actor": r["actor"], "action": r["action"],
+            "payload": json.loads(r["payload_json"]), "created_at": _iso(r["created_at"])}
+
+
+async def api_state(request):
+    p = current_principal()
+    pool = db.get_pool()
+    async with pool.acquire() as conn:
+        decisions = await repo.active_decisions(conn, p.project_id, None)
+        conflicts = await repo.open_conflicts(conn, p.project_id)
+        alerts = await repo.project_pending_alerts(conn, p.project_id)
+        handoffs = await repo.project_pending_handoffs(conn, p.project_id)
+    return JSONResponse({
+        "active_decisions": [_row_decision(r) for r in decisions],
+        "open_conflicts": [_row_conflict(r) for r in conflicts],
+        "pending_alerts": [_row_alert(r) for r in alerts],
+        "pending_handoffs": [_row_handoff(r) for r in handoffs],
+    })
+
+
+async def api_events(request):
+    p = current_principal()
+    try:
+        limit = int(request.query_params.get("limit", "100"))
+    except ValueError:
+        limit = 100
+    limit = max(1, min(limit, 500))
+    pool = db.get_pool()
+    async with pool.acquire() as conn:
+        rows = await repo.list_events(conn, p.project_id, limit)
+    return JSONResponse({"events": [_row_event(r) for r in rows]})
 
 
 async def _resolve_principal(token: str, session_id: str | None) -> Principal | None:
@@ -260,7 +329,14 @@ async def call_tool_for_test(token: str, session: str, tool: str, args: dict) ->
 
 def _build_app():
     mcp_app = mcp.streamable_http_app()   # Starlette app, MCP route at /mcp
+    mcp_app.add_route("/api/state", api_state, methods=["GET"])
+    mcp_app.add_route("/api/events", api_events, methods=["GET"])
     mcp_app.add_middleware(AuthMiddleware)
+    # CORS added last -> outermost -> answers preflight OPTIONS before AuthMiddleware
+    _origins = [o.strip() for o in os.environ.get("KEEL_CORS_ORIGINS", "*").split(",")]
+    mcp_app.add_middleware(CORSMiddleware, allow_origins=_origins,
+                           allow_methods=["GET", "OPTIONS"],
+                           allow_headers=["authorization", "content-type"])
 
     # starlette 1.x has no add_event_handler; wrap FastMCP's lifespan so the
     # pool is initialized/closed around the MCP session manager's own lifespan.
