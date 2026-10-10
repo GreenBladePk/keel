@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "keel": {
+      "type": "http",
+      "url": "http://localhost:8000/mcp",
+      "headers": {
+        "Authorization": "Bearer ${KEEL_TOKEN}",
+        "X-Keel-Session": "${CLAUDE_SESSION_ID}"
+      }
+    }
+  }
+}
