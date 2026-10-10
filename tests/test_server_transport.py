@@ -69,3 +69,34 @@ async def test_roundtrip_register_record_get(db_pool):
                                    {"scope_tags": ["api:orders"]})
     assert any(d["id"] == rec["decision_id"] for d in ctx["decisions"])
     assert ctx["inbox"] == {"alerts": [], "handoffs": [], "new_lessons": []}
+
+
+def test_clean_session_normalizes_bad_values():
+    from keel.server import _clean_session
+    assert _clean_session("${CLAUDE_SESSION_ID}") is None  # unexpanded template
+    assert _clean_session("") is None
+    assert _clean_session("   ") is None
+    assert _clean_session(None) is None
+    assert _clean_session("s1") == "s1"  # real id passes through
+
+
+async def test_unexpanded_session_header_ignored(db_pool):
+    """A connector that ships the literal ${CLAUDE_SESSION_ID} must NOT become a
+    participant with that bogus session; AuthMiddleware normalizes it to None."""
+    from starlette.applications import Starlette
+    from starlette.routing import Route
+    from starlette.responses import JSONResponse
+    from keel.server import AuthMiddleware, current_principal
+
+    async def probe(request):
+        p = current_principal()
+        return JSONResponse({"session": p.session_id})
+
+    app = Starlette(routes=[Route("/probe", probe)])
+    app.add_middleware(AuthMiddleware)
+    await _seed_token(db_pool)
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
+        r = await c.get("/probe", headers={"Authorization": "Bearer dev-token",
+                                           "X-Keel-Session": "${CLAUDE_SESSION_ID}"})
+    assert r.status_code == 200 and r.json()["session"] is None

@@ -27,6 +27,31 @@ the MCP connector lets the session record decisions and check intent.
    ```
 5. (Optional) Install the skill in `SKILL.md` so Claude knows when to call the tools.
 
+### Session identity for the MCP connector
+The `keel` connector authenticates with `Authorization: Bearer ${KEEL_TOKEN}` (expanded
+from your shell env at launch). Claude Code does **not** auto-populate a session id into
+the MCP connector's headers, so the connector's direct tool calls are not per-session by
+default — the server treats them as session-less (reads work project-wide; session-scoped
+writes say "not registered"). **Per-session identity comes from the deep-tier hooks**
+(`session_start.sh` registers the real `session_id` Claude Code passes to hooks), which is
+the guaranteed path. If you want the *connector's* tool calls scoped to a session too,
+export a unique id and add the header back to `.mcp.json`:
+```bash
+export CLAUDE_SESSION_ID=$(uuidgen)   # per shell/session
+# in .mcp.json headers: "X-Keel-Session": "${CLAUDE_SESSION_ID}"
+```
+The server ignores an unexpanded `${CLAUDE_SESSION_ID}` (it won't create a bogus participant).
+
+### Enabling conflict detection (LLM)
+Detection is LLM-backed. With `KEEL_LLM_PROVIDER=none` the server records decisions but
+`check_intent`/`record_decision` report `coverage:"degraded"` and flag no semantic
+conflicts. Set a provider + key to turn it on, e.g. OpenAI-compatible RouterPlus:
+```bash
+KEEL_LLM_PROVIDER=openai OPENAI_API_KEY=<routerplus key> \
+  OPENAI_API_BASE=https://api.routerplus.com/v1 KEEL_LLM_MODEL=openai/gpt-4.1-mini \
+  python -m keel.server
+```
+
 ## What the hooks do
 - **SessionStart** — registers this session and injects the active team decisions
   plus any pending alerts/handoffs as context.

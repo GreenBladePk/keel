@@ -43,6 +43,19 @@ def current_principal() -> Principal:
     return p
 
 
+def _clean_session(raw: str | None) -> str | None:
+    """Normalize the X-Keel-Session header. Claude Code does not auto-populate
+    ${CLAUDE_SESSION_ID}, so an MCP connector can ship the literal unexpanded
+    template; treat that (and empty/blank) as no session rather than registering a
+    bogus participant under the placeholder."""
+    if raw is None:
+        return None
+    s = raw.strip()
+    if not s or (s.startswith("${") and s.endswith("}")):
+        return None
+    return s
+
+
 # --- Dashboard read-only REST (serializers + handlers) ---
 
 def _iso(v):
@@ -123,7 +136,7 @@ async def _resolve_principal(token: str, session_id: str | None) -> Principal | 
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
         auth = request.headers.get("authorization", "")
-        session = request.headers.get("x-keel-session")
+        session = _clean_session(request.headers.get("x-keel-session"))
         token = auth[7:] if auth.lower().startswith("bearer ") else None
         if not token:
             return JSONResponse({"error": "missing bearer token"}, status_code=401)
