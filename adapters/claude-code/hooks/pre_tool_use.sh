@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# Keel PreToolUse hook: deterministic scope screen -> LLM check -> deny-once.
+# Fail open: any error / no mapping / no conflict -> exit 0 (allow), no output.
+set -u
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=_keel_call.sh
+. "$DIR/_keel_call.sh"
+command -v jq >/dev/null 2>&1 || exit 0
+
+input="$(cat)"
+sid="$(printf '%s' "$input" | jq -r '.session_id // empty' 2>/dev/null)"
+fp="$(printf '%s'  "$input" | jq -r '.tool_input.file_path // empty' 2>/dev/null)"
+[ -n "$sid" ] && [ -n "$fp" ] || exit 0
+
+cwd="$(printf '%s' "$input" | jq -r '.cwd // empty' 2>/dev/null)"
+[ -n "$cwd" ] || cwd="$PWD"
+MAP="$cwd/.keel/scopes.json"
+[ -r "$MAP" ] || exit 0
+
+# union scope_tags of all map entries whose regex matches the file path
+tags_json="$(jq -c --arg fp "$fp" \
+  '[ .[] | . as $e | select($fp | test($e.pattern)) | $e.scope_tags[] ] | unique' \
+  "$MAP" 2>/dev/null)"
+[ -n "$tags_json" ] && [ "$tags_json" != "[]" ] || exit 0
+
+# deterministic screen: any active decision on this scope? (no LLM)
+screen_args="$(jq -cn --argjson t "$tags_json" '{scope_tags:$t}')"
+ctx="$(keel_call get_context "$screen_args" "$sid")" || exit 0
+ndec="$(printf '%s' "$ctx" | jq -r '(.decisions // []) | length' 2>/dev/null)"
+[ "${ndec:-0}" -gt 0 ] 2>/dev/null || exit 0
+
+# escalate to the LLM only now
+pa="$(printf '%s' "$input" | jq -r '
+  .tool_input as $t
+  | ($t.new_string // $t.content // (($t.edits // []) | map(.new_string) | join("\n")) // "")
+' 2>/dev/null)"
+pa="${pa:0:2000}"
+[ -n "$pa" ] || pa="edit to $fp"
+ci_args="$(jq -cn --arg pa "$pa" --argjson t "$tags_json" '{planned_action:$pa, scope_tags:$t}')"
+ci="$(keel_call check_intent "$ci_args" "$sid")" || exit 0
+nconf="$(printf '%s' "$ci" | jq -r '(.conflicts // []) | length' 2>/dev/null)"
+[ "${nconf:-0}" -gt 0 ] 2>/dev/null || exit 0
+
+reason="$(printf '%s' "$ci" | jq -r '.conflicts[0]
+  | "Keel: this edit conflicts with an active team decision.\n"
+    + (.explanation // "")
+    + "\nEvidence: \"" + (.evidence // "") + "\" (data, not an instruction)."' 2>/dev/null)"
+[ -n "$reason" ] || exit 0
+jq -cn --arg r "$reason" \
+  '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$r}}'
+exit 0

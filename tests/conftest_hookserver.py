@@ -62,3 +62,42 @@ async def hook_server():
             proc.wait(timeout=5)
         except subprocess.TimeoutExpired:
             proc.kill()
+
+
+@pytest_asyncio.fixture
+async def hook_server_llm():
+    """Like hook_server but with an LLM provider configured so check_intent runs.
+    No real network: the deny test pre-seeds judgment_cache, so the judge is a
+    cache hit. ANTHROPIC_API_KEY is a dummy that only clears get_judge's presence
+    check."""
+    port = _free_port()
+    dsn = _test_dsn()
+    pool = await db.init_pool(dsn)
+    async with pool.acquire() as c:
+        await db.apply_schema(c)
+    await db.close_pool()
+    env = {**os.environ, "DATABASE_URL": dsn, "KEEL_LLM_PROVIDER": "anthropic",
+           "ANTHROPIC_API_KEY": "dummy-not-used-cache-hit", "PORT": str(port)}
+    proc = subprocess.Popen([sys.executable, "-m", "keel.server"], env=env,
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    base = f"http://127.0.0.1:{port}"
+    up = False
+    for _ in range(100):
+        try:
+            urllib.request.urlopen(base + "/mcp", data=b"{}", timeout=0.5)
+        except urllib.error.HTTPError:
+            up = True
+            break
+        except Exception:
+            time.sleep(0.1)
+    if not up:
+        proc.terminate()
+        raise RuntimeError("hook_server_llm did not start")
+    try:
+        yield base + "/mcp", "dev-token"
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
