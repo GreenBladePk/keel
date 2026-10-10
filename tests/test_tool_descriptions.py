@@ -7,7 +7,7 @@ async def test_all_tools_have_descriptions():
                 "declare_dependency", "claim_scope", "release_scope", "list_alerts",
                 "ack_alert", "resolve_conflict",
                 "create_handoff", "accept_handoff", "decline_handoff",
-                "report_activity"}
+                "report_activity", "record_outcome", "rate_alert", "request_decision"}
     assert set(tools) == expected
     for name, t in tools.items():
         assert t.description and len(t.description.strip()) >= 20, f"{name} missing description"

@@ -24,6 +24,8 @@ from keel.tools.resolve_conflict import resolve_conflict as _resolve_conflict
 from keel.tools.handoff import create_handoff as _create_handoff, \
     accept_handoff as _accept_handoff, decline_handoff as _decline_handoff
 from keel.tools.report_activity import report_activity as _report_activity
+from keel.tools.outcomes import record_outcome as _record_outcome, rate_alert as _rate_alert
+from keel.tools.decision_request import request_decision as _request_decision
 
 _principal_var: contextvars.ContextVar[Principal | None] = contextvars.ContextVar(
     "keel_principal", default=None
@@ -320,6 +322,39 @@ async def report_activity(source: str, scope_tags: list[str] | None = None,
                                   file_paths=file_paths, ref=ref)
 
 
+@mcp.tool()
+async def record_outcome(decision_id: str, result: str, evidence_ref: str | None = None) -> dict:
+    """Record what happened to a decision (held, reversed, or caused_rework).
+
+    Use after you learn a decision's real-world outcome; optionally cite evidence
+    (a PR, an incident). Feeds drift/eval. Returns the outcome id and an `inbox`.
+    """
+    return await _record_outcome(db.get_pool(), current_principal(), decision_id=decision_id,
+                                 result=result, evidence_ref=evidence_ref)
+
+
+@mcp.tool()
+async def rate_alert(alert_id: str, verdict: str, note: str | None = None) -> dict:
+    """Rate an alert addressed to you as useful or noise (feeds alert-quality eval).
+
+    Recipient only. Optionally attach a note. Returns the feedback id and an `inbox`.
+    """
+    return await _rate_alert(db.get_pool(), current_principal(), alert_id=alert_id,
+                             verdict=verdict, note=note)
+
+
+@mcp.tool()
+async def request_decision(question: str, owner_person: str, options: list[str] | None = None,
+                           scope_tags: list[str] | None = None) -> dict:
+    """Ask a decision owner (by display name) to make a decision you are blocked on.
+
+    Records an open decision request with your question, optional options, and scope.
+    Returns the request id and an `inbox`.
+    """
+    return await _request_decision(db.get_pool(), current_principal(), question=question,
+                                   owner_person=owner_person, options=options, scope_tags=scope_tags)
+
+
 # Test-only helper: run the real auth resolution + dispatch without MCP framing.
 _HANDLERS = {
     "register_session": lambda p, a: _register_session(db.get_pool(), p, **a),
@@ -336,6 +371,9 @@ _HANDLERS = {
     "accept_handoff": lambda p, a: _accept_handoff(db.get_pool(), p, **a),
     "decline_handoff": lambda p, a: _decline_handoff(db.get_pool(), p, **a),
     "report_activity": lambda p, a: _report_activity(db.get_pool(), p, **a),
+    "record_outcome": lambda p, a: _record_outcome(db.get_pool(), p, **a),
+    "rate_alert": lambda p, a: _rate_alert(db.get_pool(), p, **a),
+    "request_decision": lambda p, a: _request_decision(db.get_pool(), p, **a),
 }
 
 
