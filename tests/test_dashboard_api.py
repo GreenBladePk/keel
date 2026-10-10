@@ -74,6 +74,20 @@ async def test_cors_preflight_no_auth(db_pool):
     assert r.headers.get("access-control-allow-origin") in ("*", "http://localhost:8050")
 
 
+async def test_cors_allows_x_keel_session_header(db_pool):
+    # the dashboard sends X-Keel-Session; the preflight must allow it or the
+    # browser blocks the request with "Failed to fetch".
+    await _seed(db_pool)
+    async with _client() as c:
+        r = await c.options("/api/state", headers={
+            "Origin": "http://localhost:8050",
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "authorization,x-keel-session"})
+    assert r.status_code in (200, 204)
+    allowed = r.headers.get("access-control-allow-headers", "").lower()
+    assert "x-keel-session" in allowed or allowed == "*"
+
+
 async def test_project_isolation(db_pool):
     await _seed(db_pool)
     async with db_pool.acquire() as conn:

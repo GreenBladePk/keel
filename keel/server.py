@@ -406,7 +406,7 @@ def _build_app():
     _origins = [o.strip() for o in os.environ.get("KEEL_CORS_ORIGINS", "*").split(",")]
     mcp_app.add_middleware(CORSMiddleware, allow_origins=_origins,
                            allow_methods=["GET", "OPTIONS"],
-                           allow_headers=["authorization", "content-type"])
+                           allow_headers=["*"])
 
     # starlette 1.x has no add_event_handler; wrap FastMCP's lifespan so the
     # pool is initialized/closed around the MCP session manager's own lifespan.
