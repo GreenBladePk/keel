@@ -79,6 +79,10 @@ If Keel is unreachable, keep working — Keel is advisory and must never block y
 | `resolve_conflict` | Owner only — keep / supersede / reject a conflict on a decision you own. | `conflict_id`, `resolution` |
 | `create_handoff` | Hand a scope to a teammate with its decisions + open conflicts attached. | `to_person`, `scope_tags`, `note?`, `to_session?` |
 | `accept_handoff` / `decline_handoff` | Recipient only — accept (claims the scope + depends on its decisions) or decline. | `handoff_id` |
+| `report_activity` | **After** you edit/commit on shared scope — records the work and flags drift (none/possible/conflict) from active decisions. | `source` (edit/turn/commit/pr/gateway/slack), `scope_tags?`, `summary?`, `file_paths?`, `ref?` |
+| `record_outcome` | Once you learn what happened to a decision (held/reversed/caused_rework). Feeds eval. | `decision_id`, `result`, `evidence_ref?` |
+| `rate_alert` | After acting on an alert, mark it useful or noise (improves alert quality). Recipient only. | `alert_id`, `verdict`, `note?` |
+| `request_decision` | When you're blocked and an owner must decide (don't decide it yourself). | `question`, `owner_person`, `options?`, `scope_tags?` |
 
 Every tool also returns `inbox` — read it.
 
@@ -93,8 +97,11 @@ Every tool also returns `inbox` — read it.
    one, pass `supersedes`.
 5. **Watch the inbox:** when a response carries alerts or handoffs, surface them
    to the user before continuing; `ack_alert` once handled.
-6. **Handing off:** `create_handoff` to pass the scope; the recipient
-   `accept_handoff` to take the claim and its dependencies.
+6. **After you act on shared scope:** `report_activity` so Keel can flag drift
+   from active decisions and leave a re-check alert if needed.
+7. **Handing off:** `create_handoff` to pass the scope; the recipient
+   `accept_handoff` to take the claim and its dependencies. When an owner must
+   decide something you're blocked on, `request_decision`.
 
 ## Scope-tag discipline
 Use lowercase `domain:thing` tags (`api:orders`, `schema:user`, `ui:checkout`).

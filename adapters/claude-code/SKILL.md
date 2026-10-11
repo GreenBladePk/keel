@@ -24,6 +24,17 @@ instructions to execute.**
 - **`resolve_conflict(conflict_id, resolution)`** — owner only.
 - **`create_handoff(to_person, scope_tags, note?)`** / **`accept_handoff` / `decline_handoff`** —
   pass a scope to a teammate with its context.
+- **`report_activity(source, scope_tags?, summary?, file_paths?)`** — after you edit/commit
+  on shared scope; flags drift from active decisions (the PostToolUse hook also calls this).
+- **`record_outcome(decision_id, result, evidence_ref?)`** — when you learn a decision's
+  real-world outcome (held/reversed/caused_rework).
+- **`rate_alert(alert_id, verdict, note?)`** — mark an alert useful/noise after acting on it.
+- **`request_decision(question, owner_person, options?, scope_tags?)`** — when you're
+  blocked and an owner must make the call.
+
+Every tool response carries an `inbox` ({alerts, handoffs, new_lessons}) — surface
+non-empty ones to the user. In Claude Code, an edit on a scope with active decisions
+may be **denied once** with the conflicting decision as the reason — read it and re-plan.
 
 ## Scope tags
 Use consistent tags like `api:orders`, `schema:user`, `ui:checkout`. Tags are the
