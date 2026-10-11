@@ -139,7 +139,7 @@ async def participants_with_dependency(conn, decision_ids: list) -> list[asyncpg
     return await conn.fetch(
         """SELECT DISTINCT p.* FROM participant p
            JOIN dependency d ON d.dependent_type='participant' AND d.dependent_ref = p.id::text
-           WHERE d.decision_id = ANY($1::uuid[])""",
+           WHERE d.decision_id = ANY($1::uuid[]) AND p.status='active'""",
         decision_ids)
 
 
@@ -160,8 +160,15 @@ async def insert_alert(conn, *, project_id, target_participant_id, target_person
 async def pending_alerts_for_participant(conn, participant_id) -> list[asyncpg.Record]:
     return await conn.fetch(
         """SELECT * FROM alert WHERE target_participant_id=$1 AND acknowledged_at IS NULL
-           ORDER BY id DESC""",
+           ORDER BY created_at DESC, id DESC""",
         participant_id)
+
+
+async def unacked_change_alert_exists(conn, participant_id, ref_id) -> bool:
+    return bool(await conn.fetchval(
+        """SELECT 1 FROM alert WHERE target_participant_id=$1 AND ref_id=$2
+           AND kind='change' AND acknowledged_at IS NULL LIMIT 1""",
+        participant_id, ref_id))
 
 
 async def mark_alert_delivered(conn, alert_id) -> None:
@@ -255,7 +262,7 @@ async def open_conflicts(conn, project_id) -> list[asyncpg.Record]:
 async def project_pending_alerts(conn, project_id) -> list[asyncpg.Record]:
     return await conn.fetch(
         """SELECT * FROM alert WHERE project_id=$1 AND acknowledged_at IS NULL
-           ORDER BY id DESC""",
+           ORDER BY created_at DESC, id DESC""",
         project_id)
 
 

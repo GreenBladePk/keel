@@ -22,10 +22,13 @@ async def build_inbox(conn, principal: Principal) -> dict:
         await repo.mark_alert_delivered(conn, r["id"])
         alerts.append({"id": str(r["id"]), "kind": r["kind"], "ref_id": str(r["ref_id"]),
                        "summary": await _summary(conn, r["kind"], r["ref_id"]),
-                       "created_at": r["delivered_at"].isoformat() if r["delivered_at"] else None})
+                       "created_at": r["created_at"].isoformat() if r["created_at"] else None})
     handoffs = []
     for hr in await repo.pending_handoffs_for_person(conn, principal.project_id,
                                                      principal.person_id):
+        # don't surface a handoff back to the session that created it (self-handoff)
+        if hr["from_participant_id"] == part["id"]:
+            continue
         handoffs.append({
             "id": str(hr["id"]),
             "from_participant_id": str(hr["from_participant_id"]) if hr["from_participant_id"] else None,

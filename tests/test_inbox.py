@@ -84,3 +84,31 @@ async def test_inbox_handoff_gone_after_status_change(conn):
     await repo.set_handoff_status(conn, h["id"], "declined")
     box = await build_inbox(conn, Principal(pid, receiver, "s2"))
     assert box["handoffs"] == []
+
+
+async def test_inbox_alert_created_at_present(conn):
+    pid = await repo.upsert_project(conn, "demo")
+    person = await repo.upsert_person(conn, pid, "vasan", "h")
+    part = await repo.upsert_participant(conn, pid, person, "cc", "deep", "s1", [])
+    d = await repo.insert_decision(conn, project_id=pid, statement="cursor", rationale="r",
+                                   scope_tags=["api:orders"], owner_person_id=person,
+                                   source_participant_id=part)
+    await repo.insert_alert(conn, project_id=pid, target_participant_id=part,
+                            target_person_id=person, kind="change", ref_id=d["id"])
+    box = await build_inbox(conn, Principal(pid, person, "s1"))
+    assert box["alerts"][0]["created_at"] is not None  # real creation time, not null
+
+
+async def test_self_handoff_not_shown_to_creator(conn):
+    pid = await repo.upsert_project(conn, "demo")
+    person = await repo.upsert_person(conn, pid, "vasan", "h")
+    s1 = await repo.upsert_participant(conn, pid, person, "cc", "deep", "s1", [])
+    await repo.upsert_participant(conn, pid, person, "cc", "deep", "s2", [])
+    await repo.insert_handoff(conn, project_id=pid, from_participant_id=s1,
+                              to_person_id=person, to_participant_id=None,
+                              scope_tags=["api:orders"], decision_ids=[], conflict_ids=[],
+                              note="to myself")
+    # the creating session does NOT see its own handoff...
+    assert (await build_inbox(conn, Principal(pid, person, "s1")))["handoffs"] == []
+    # ...but the person's other session does
+    assert len((await build_inbox(conn, Principal(pid, person, "s2")))["handoffs"]) == 1

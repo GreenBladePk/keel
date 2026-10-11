@@ -85,3 +85,13 @@ async def test_resolve_conflict(conn):
     await repo.resolve_conflict(conn, c["id"], "keep", person)
     got = await repo.get_conflict(conn, c["id"])
     assert got["status"] == "resolved" and got["resolution"] == "keep" and got["resolved_by"] == person
+
+
+async def test_dependency_targets_excludes_inactive(conn):
+    pid, person, part = await _p(conn, "vasan", "s1")
+    d = await repo.insert_decision(conn, project_id=pid, statement="x", rationale="r",
+                                   scope_tags=["api:orders"], owner_person_id=person,
+                                   source_participant_id=part)
+    await repo.insert_dependency(conn, d["id"], part)
+    await conn.execute("UPDATE participant SET status='ended' WHERE id=$1", part)
+    assert await repo.participants_with_dependency(conn, [d["id"]]) == []

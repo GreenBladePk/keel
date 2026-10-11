@@ -41,6 +41,8 @@ async def propagate_conflicts(conn, project_id, conflicts, author_participant_id
     + conflict_id)."""
     alert_ids = []
     for c in conflicts:
+        if not c.get("conflict_id"):
+            continue  # unpersisted conflict (check_intent) has no ref to alert on
         cand = await repo.get_decision(conn, c["candidate_id"])
         if cand is None or cand["owner_person_id"] is None:
             continue

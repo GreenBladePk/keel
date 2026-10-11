@@ -108,9 +108,11 @@ CREATE TABLE IF NOT EXISTS alert (
     target_person_id     uuid REFERENCES person(id),
     kind                 text NOT NULL CHECK (kind IN ('conflict','change')),
     ref_id               uuid NOT NULL,
+    created_at           timestamptz NOT NULL DEFAULT now(),
     delivered_at         timestamptz,
     acknowledged_at      timestamptz
 );
+ALTER TABLE alert ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now();
 
 CREATE TABLE IF NOT EXISTS event (
     id          bigserial PRIMARY KEY,

@@ -55,7 +55,10 @@ async def report_activity(pool, principal: Principal, *, source, scope_tags=None
                 source=source, scope_tags=tags, summary=summary, file_paths=file_paths or [],
                 ref=ref, confidence=confidence, result=result)
             alert_id = None
-            if result in ("possible", "conflict") and alert_ref is not None:
+            if (result in ("possible", "conflict") and alert_ref is not None
+                    and not await repo.unacked_change_alert_exists(
+                        conn, participant["id"], alert_ref)):
+                # dedupe: don't pile up self change-alerts for the same decision
                 a = await repo.insert_alert(conn, project_id=principal.project_id,
                                             target_participant_id=participant["id"],
                                             target_person_id=principal.person_id,

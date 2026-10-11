@@ -82,3 +82,12 @@ async def test_conflict_alert_to_candidate_owner(conn, db_pool, monkeypatch):
     assert len(out["conflicts"]) == 1
     owner_alerts = await repo.pending_alerts_for_participant(conn, owner_part)
     assert any(a["kind"] == "conflict" for a in owner_alerts)
+
+
+async def test_propagate_conflicts_skips_missing_conflict_id(conn):
+    pid = await repo.upsert_project(conn, "demo")
+    author, apart = await _person_session(conn, pid, "vasan", "s1")
+    # a conflict dict without a persisted conflict_id must be skipped (no crash, no alert)
+    from keel import propagation
+    out = await propagation.propagate_conflicts(conn, pid, [{"candidate_id": "x", "conflict_id": None}], apart)
+    assert out == []
