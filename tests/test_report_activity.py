@@ -79,4 +79,13 @@ async def test_report_activity_dedupes_self_alert(conn, db_pool):
         await report_activity(db_pool, Principal(pid, person, "s1"), source="edit",
                               scope_tags=["api:orders"], summary="touch orders", file_paths=["o.py"])
     # three reports on the same decided scope -> ONE unacked self change-alert, not three
-    assert len(await repo.project_pending_alerts(conn, pid)) == 1
+    alerts = await repo.project_pending_alerts(conn, pid)
+    assert len(alerts) == 1
+    # ...but every call still logs a drift_signal (only the alert is deduped)
+    assert await conn.fetchval("SELECT count(*) FROM drift_signal WHERE project_id=$1", pid) == 3
+    # after acknowledging, a new report re-alerts (dedupe only suppresses UNACKED)
+    part = await repo.get_participant(conn, pid, person, "s1")
+    await repo.ack_alert(conn, alerts[0]["id"], part["id"])
+    await report_activity(db_pool, Principal(pid, person, "s1"), source="edit",
+                          scope_tags=["api:orders"], summary="touch orders again", file_paths=["o.py"])
+    assert len(await repo.project_pending_alerts(conn, pid)) == 1  # a fresh one

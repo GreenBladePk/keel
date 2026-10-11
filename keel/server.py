@@ -78,7 +78,7 @@ def _row_conflict(r):
 def _row_alert(r):
     return {"id": str(r["id"]), "kind": r["kind"], "ref_id": str(r["ref_id"]),
             "target_person_id": str(r["target_person_id"]) if r["target_person_id"] else None,
-            "delivered_at": _iso(r["delivered_at"])}
+            "created_at": _iso(r["created_at"]), "delivered_at": _iso(r["delivered_at"])}
 
 
 def _row_handoff(r):

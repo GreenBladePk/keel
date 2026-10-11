@@ -93,10 +93,16 @@ async def test_inbox_alert_created_at_present(conn):
     d = await repo.insert_decision(conn, project_id=pid, statement="cursor", rationale="r",
                                    scope_tags=["api:orders"], owner_person_id=person,
                                    source_participant_id=part)
-    await repo.insert_alert(conn, project_id=pid, target_participant_id=part,
-                            target_person_id=person, kind="change", ref_id=d["id"])
+    a_old = await repo.insert_alert(conn, project_id=pid, target_participant_id=part,
+                                    target_person_id=person, kind="change", ref_id=d["id"])
+    a_new = await repo.insert_alert(conn, project_id=pid, target_participant_id=part,
+                                    target_person_id=person, kind="conflict", ref_id=d["id"])
+    # force distinct creation times so the created_at ordering is deterministic
+    await conn.execute("UPDATE alert SET created_at = now() - interval '1 hour' WHERE id=$1",
+                       a_old["id"])
     box = await build_inbox(conn, Principal(pid, person, "s1"))
     assert box["alerts"][0]["created_at"] is not None  # real creation time, not null
+    assert [al["id"] for al in box["alerts"]] == [str(a_new["id"]), str(a_old["id"])]  # newest first
 
 
 async def test_self_handoff_not_shown_to_creator(conn):
