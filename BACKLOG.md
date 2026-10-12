@@ -257,3 +257,164 @@ type: ops · P0 · S · labels: ops
 - TDD per item; `KEEL_TEST_DATABASE_URL=… pytest -q` stays green.
 - Engine/tool changes: exercise via MCP (`curl` one stateless `tools/call`) + the dashboard.
 - LLM-touching changes: run the gated live tests with a provider key (RouterPlus) and keep the eval floor (f1 ≥ 0.7).
+
+---
+
+# Enhancement Wave: Identity, Onboarding, Admin & Agent UX
+
+Decisions: **auth = managed connect-link first, then MCP OAuth 2.1**; **IdP = Firebase
+Auth / Google Sign-In** (fits the GCP deploy); **tenancy = add an Org layer**. Researched
+vs Claude Code remote-MCP OAuth (RFC 9728 + PKCE), Composio (Auth Link), Smithery/WorkOS.
+New labels: `identity` `onboarding` `admin` `ux`.
+
+## Target model
+```
+org ── projects ── membership(person, role: owner/admin/member/viewer)
+ └── people ── agents (harness: claude-code / codex / cursor / …) ── sessions
+```
+- A **person** is an org member; joins projects with a role.
+- An **agent** = a person's harness instance (gets its own scoped credential).
+- A **session** = one run of an agent (auto-registered via hooks).
+- Current `participant` ≈ (agent × session); we formalize `agent` and `session`.
+
+## Recommended sequencing
+Foundation **I1 (org) → I2 (Firebase login) → I5 (tokens)** → onboarding **I3 (connect-link)
+→ I7 (onboarding CLI/prompt)** → **I8 (admin) + UX1/UX4** → **I4 (MCP OAuth 2.1)** → S-series.
+
+## IDENTITY / ONBOARDING / ADMIN (I-series)
+
+### I1 · Org + roles tenancy model
+type: enhancement · P1 · L · labels: enhancement identity
+- **Context:** project is the top unit and person is per-project; no org, no roles.
+- **Acceptance:** `org`, `project.org_id`, `membership(scope, person_id, role)`; person org-scoped (unique email per org); roles owner/admin/member/viewer resolve on every request; existing single-project data migrates cleanly.
+- **Touch points:** `keel/db/schema.sql` (+migration), `keel/keel/repo.py`, `keel/keel/server.py` (principal → memberships), new `keel/keel/authz.py`.
+- **Approach:** additive tables; `AuthMiddleware` resolves person → memberships → role; default org per existing project for back-compat.
+
+### I2 · Firebase Auth login for dashboard + admin
+type: enhancement · P1 · M · labels: enhancement identity admin
+- **Context:** humans have no login; dashboard pastes a raw token.
+- **Acceptance:** dashboard + admin behind Google Sign-In (Firebase Auth); server verifies the Firebase ID token → maps to a Keel person (create-on-first-login or invite); no passwords stored.
+- **Touch points:** `dashboard/` (Firebase web SDK), `keel/keel/server.py` (verify Firebase JWT → `Principal`), `deploy/`.
+- **Approach:** accept `Authorization: Bearer <firebase-id-token>` on `/api/*`+admin; verify via Google public keys; reuse `AuthMiddleware`.
+
+### I3 · "Connect your agent" link (device-code) — Phase-1 auth
+type: feature · P0 · L · labels: feature onboarding identity
+- **Context:** the headline ask — after installing the MCP server, a special URL authenticates the harness and auto-syncs sessions.
+- **Acceptance:** dashboard "Connect Claude Code / Codex" shows a one-time code + URL (OAuth Device Authorization Grant); the harness (`keel connect` CLI/hook) exchanges the code for a **scoped agent token**, writes it into the harness MCP config + installs hooks; SessionStart then auto-registers sessions. Token shown once, revocable.
+- **Touch points:** new `/connect/*` endpoints (`server.py`), token issuance (`repo.py`, I5), dashboard approve UI, `adapters/connect/` CLI.
+- **Approach:** RFC 8628 device grant backed by Firebase login (approver must be signed in); mint an agent-scoped Keel token on approval.
+
+### I4 · MCP OAuth 2.1 (protected resource) — Phase-2 auth
+type: feature · P1 · L · labels: feature onboarding identity
+- **Context:** native `claude mcp add <url>` flow; Claude Code runs OAuth itself.
+- **Acceptance:** Keel is an OAuth protected resource — `401`+`WWW-Authenticate`, `/.well-known/oauth-protected-resource` (RFC 9728) + auth-server metadata (RFC 8414), PKCE (RFC 7636), dynamic client registration (RFC 7591); Firebase/Google IdP. `claude mcp add --transport http <keel-url>` → browser → auto-token.
+- **Touch points:** `keel/keel/server.py` (OAuth metadata + resource-server middleware), `deploy/`, docs.
+- **Approach:** front with an auth server trusting Firebase; verify PKCE tokens as the resource server. Ensure the 401 carries `WWW-Authenticate` (common failure).
+
+### I5 · Token/credential management (scope/rotate/revoke)
+type: enhancement · P1 · M · labels: enhancement identity security
+- **Context:** one raw per-person token, no scopes/rotation/revocation (absorbs old F10 read-only token).
+- **Acceptance:** per-person and per-agent tokens with scopes (full / read-only / connect); rotate + revoke (`revoked_at`); hashed at rest, shown once; self-serve + admin.
+- **Touch points:** `keel/db/schema.sql` (`token` table), `repo.py`, auth, dashboard.
+
+### I6 · First-class Agent + Session registry & lifecycle
+type: enhancement · P1 · M · labels: enhancement identity ux
+- **Context:** `participant` conflates agent and session; no close or live status.
+- **Acceptance:** an `agent` (person + harness + label/machine) distinct from `session`; SessionStart registers, SessionEnd/Stop closes (absorbs old F5); `last_seen` heartbeat; dashboard org→project→person→agent→session tree with live/idle status.
+- **Touch points:** `schema.sql`, new `SessionEnd`/`Stop` hook in `adapters/claude-code/hooks/`, `repo.py`, dashboard.
+
+### I7 · Seamless onboarding per harness (CLI + prompt)
+type: feature · P0 · M · labels: feature onboarding ux
+- **Context:** onboarding must be one-step, prompt/CLI-driven per harness.
+- **Acceptance:** `npx @keel/connect <harness>` (and a paste-prompt skill) installs hooks + `.mcp.json`, runs the I3 connect-link flow, verifies, prints next steps. Recipes for Claude Code, Codex, Cursor, generic MCP. Builds on `adapters/agent-skill`.
+- **Touch points:** new `adapters/connect/` (CLI + templates), docs. Depends on I3.
+
+### I8 · Admin panel in the dashboard
+type: feature · P1 · L · labels: feature admin
+- **Context:** no admin surface; everything is SQL.
+- **Acceptance:** behind an admin role (I2): manage org/projects/people/roles/invites/tokens; view all agents+sessions (live, I6); audit-log (event) viewer + search; usage & productivity metrics (UX4); alert-feedback review; configure LLM provider + scope taxonomy; revoke/rotate.
+- **Touch points:** `dashboard/` (admin views + auth gate), `keel/keel/server.py` (admin REST behind RBAC), `repo.py`.
+
+## AGENT UX / PRODUCTIVITY (UX-series)
+
+### UX1 · "What changed since you last worked here" digest
+type: enhancement · P1 · M · labels: enhancement ux
+- **Acceptance:** on SessionStart (per scope), summarize new/changed decisions, newly open conflicts, pending handoffs since the agent's `last_seen`; injected as a short, data-framed block.
+- **Touch points:** `inbox.py`/`get_context`, `adapters/.../session_start.sh`, `repo.py` (since-timestamp queries).
+
+### UX2 · Scope-tag autocomplete + curated taxonomy
+type: enhancement · P1 · M · labels: enhancement ux
+- **Acceptance:** `suggest_tags(prefix/area)` + admin-curated taxonomy; dashboard autocomplete; ties into fuzzy reconcile (old E3).
+- **Touch points:** `scope.py`, a tool/REST, dashboard.
+
+### UX3 · Decision / ledger search
+type: feature · P2 · M · labels: feature ux
+- **Acceptance:** full-text + semantic search tool + dashboard search over decisions, conflicts, events.
+- **Touch points:** `repo.py` (FTS + pgvector), a `search` tool, dashboard.
+
+### UX4 · Productivity metrics
+type: enhancement · P1 · M · labels: enhancement ux admin
+- **Acceptance:** per person/project/agent: decisions recorded, conflicts prevented (deny-once hits), alerts acted on, rework avoided (from outcomes); dashboard charts + weekly digest.
+- **Touch points:** `repo.py` (aggregates), dashboard, digest job.
+
+### UX5 · Digests & notifications (Slack / email)
+type: feature · P2 · L · labels: feature ux
+- **Acceptance:** opt-in daily/weekly Slack/email digest (new decisions, open conflicts, pending handoffs/requests); per-event Slack posts (extends old F7).
+- **Touch points:** `keel/keel/integrations/`, config, dashboard settings.
+
+### UX6 · Inbox UX (dashboard + agent)
+type: enhancement · P2 · M · labels: enhancement ux
+- **Acceptance:** grouping, unread badges, snooze, bulk-ack, conflict drill-down, resolve/ack from the UI (absorbs old E11).
+- **Touch points:** `dashboard/`, existing alert/handoff tools.
+
+### UX7 · Decision templates, categories & provenance
+type: enhancement · P2 · M · labels: enhancement ux
+- **Acceptance:** optional templates/categories on `record_decision`; "explain this decision" view (author/when/why/linked conflicts/outcomes/handoffs).
+- **Touch points:** `record_decision`, dashboard, `repo.py`.
+
+### UX8 · Per-agent activity feed
+type: enhancement · P2 · S · labels: enhancement ux
+- **Acceptance:** a feed of what each of a person's agents did across sessions (from events), in the dashboard.
+- **Touch points:** `repo.list_events` (filters), dashboard.
+
+## SERVER / PLATFORM SOFTWARE (S-series)
+
+### S1 · RBAC + allowed_scopes enforcement
+type: enhancement · P1 · M · labels: enhancement security
+- **Acceptance:** write tools/endpoints gated by role (I1) + participant `allowed_scopes` (absorbs old E7); default permissive, configurable; tested.
+- **Touch points:** `keel/keel/authz.py`, tool handlers, `server.py`.
+
+### S2 · Rate limiting + abuse protection
+type: enhancement · P2 · M · labels: enhancement ops
+- **Acceptance:** per-token/person/org limits with clear 429s; configurable.
+- **Touch points:** `server.py` middleware, config.
+
+### S3 · Webhooks
+type: feature · P2 · M · labels: feature
+- **Acceptance:** signed, retriable webhooks on decision.recorded / conflict.detected / handoff / alert → external URLs; managed in admin.
+- **Touch points:** new `integrations/webhooks.py`, event hook, admin UI.
+
+### S4 · SSO (Google Workspace) + org auto-provisioning
+type: enhancement · P2 · M · labels: enhancement identity
+- **Acceptance:** Workspace domain → org; members auto-join on first Google sign-in (via I2).
+- **Touch points:** auth (`server.py`), `repo.py`.
+
+### S5 · Audit export + retention / privacy
+type: enhancement · P2 · M · labels: enhancement ops security
+- **Acceptance:** export the event log; per-project retention; GDPR delete (person/project purge) with chain-integrity semantics.
+- **Touch points:** `repo.py`, admin, docs.
+
+### S6 · Usage metering / quotas (multi-tenant)
+type: enhancement · P3 · L · labels: enhancement ops
+- **Acceptance:** per-org usage counters + soft/hard quotas; billing hooks later.
+- **Touch points:** `repo.py`, middleware, admin.
+
+### S7 · Observability & health
+type: enhancement · P1 · M · labels: enhancement ops
+- **Acceptance:** `/healthz`, structured logs with request/session ids, metrics (conflict rate, degraded rate, latency) — absorbs old E8.
+- **Touch points:** `server.py`, `conflict/pipeline.py`.
+
+### S8 · Multi-project / org switching in one session
+type: enhancement · P2 · M · labels: enhancement identity
+- **Acceptance:** one token spanning memberships; a `project`/`org` arg or header scopes a call; default from membership.
+- **Touch points:** auth (`server.py`), tool signatures, docs.
