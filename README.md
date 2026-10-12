@@ -1,7 +1,5 @@
 # Keel
 
-> **Name is a placeholder** (design docs, `OPEN_QUESTIONS` #1, unsettled). Do not harden into domains, package names, or published identifiers.
-
 **The shared source of truth underneath multiplayer AI.** An open-source, vendor-neutral **intent & decision ledger** for teams and their AI agents — it captures decisions from agent sessions over MCP, detects contradictions with active decisions, and propagates changes to the sessions and people affected *before the next action*.
 
 <p>
