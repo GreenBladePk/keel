@@ -7,9 +7,10 @@ from keel.evals.runner import load_dataset, evaluate
 # real calls). Provider-agnostic — picks whichever key is present, so it runs
 # against Anthropic, OpenAI, or an OpenAI-compatible endpoint like RouterPlus
 # (OPENAI_API_KEY + OPENAI_API_BASE).
-_PROVIDER_KEYS = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY",
-                  "openrouter": "OPENROUTER_API_KEY"}
-_DEFAULT_MODEL = {"anthropic": "anthropic/claude-sonnet-5-5",
+_PROVIDER_KEYS = {"gemini": "GEMINI_API_KEY", "anthropic": "ANTHROPIC_API_KEY",
+                  "openai": "OPENAI_API_KEY", "openrouter": "OPENROUTER_API_KEY"}
+_DEFAULT_MODEL = {"gemini": "gemini/gemini-2.0-flash",
+                  "anthropic": "anthropic/claude-sonnet-5-5",
                   "openai": "openai/gpt-4.1-mini",
                   "openrouter": "openrouter/openai/gpt-4.1-mini"}
 

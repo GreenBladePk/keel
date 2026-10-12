@@ -4,7 +4,10 @@ from pydantic import BaseModel, Field
 
 _RELATIONS = ("contradicts", "duplicates", "supersedes", "consistent", "unclear")
 _PROVIDER_KEYS = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY",
-                  "openrouter": "OPENROUTER_API_KEY"}
+                  "openrouter": "OPENROUTER_API_KEY",
+                  # Google AI: Gemini via AI Studio (GEMINI_API_KEY) or Gemma/Gemini
+                  # via Vertex AI on GCP (ADC / service account — no single key env).
+                  "gemini": "GEMINI_API_KEY", "vertex_ai": None}
 
 
 class Judgment(BaseModel):
